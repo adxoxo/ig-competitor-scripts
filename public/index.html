@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Competitor Script Finder</title>
+<meta name="description" content="Compare the top Instagram posts of a client and its competitors, and get 3 new scripts for the client.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="wrap">
+  <header class="app-head">
+    <h1>Competitor Script Finder</h1>
+    <p class="lede">See what wins in your niche. Add a client and its competitors. We read their top posts from the last 90 days, find the patterns, and write 3 new scripts for the client.</p>
+  </header>
+
+  <!-- ===== VIEW: FORM ===== -->
+  <section class="view" data-view="form">
+    <form id="run-form" class="card" novalidate>
+      <h2>Accounts</h2>
+      <p class="muted" style="font-size:14.5px">Add 4 to 11 public accounts in the same niche. Mark one account as the client.</p>
+      <ol class="acct-list" id="acct-list"></ol>
+      <div id="form-alert" class="alert error" role="alert" hidden></div>
+      <div class="form-actions">
+        <span class="count" id="acct-count"></span>
+        <button type="button" class="btn ghost" id="add-acct">+ Add account</button>
+        <button type="submit" class="btn" id="run-btn">Run analysis</button>
+      </div>
+      <p class="form-note">A new run takes a few minutes. A set that ran in the last 24 hours shows at once.</p>
+    </form>
+  </section>
+
+  <!-- ===== VIEW: PROGRESS ===== -->
+  <section class="view" data-view="progress" hidden>
+    <div class="card">
+      <div class="section-head" style="margin-bottom:0">
+        <h2>Working on it</h2>
+        <span class="muted" style="font-size:14px" id="elapsed"></span>
+      </div>
+      <p class="muted" style="font-size:14.5px">Keep this tab open. You can read the top posts below while the transcripts load.</p>
+      <ol class="stages" aria-live="polite">
+        <li class="stage" id="stage-posts"><div class="top"><span class="dot">1</span>Get posts</div><div class="meta"></div></li>
+        <li class="stage" id="stage-tx"><div class="top"><span class="dot">2</span>Transcripts</div><div class="meta"></div><div class="bar" hidden><i style="width:0"></i></div></li>
+        <li class="stage" id="stage-llm"><div class="top"><span class="dot">3</span>Analysis</div><div class="meta"></div></li>
+      </ol>
+    </div>
+    <div class="section" id="progress-posts" hidden>
+      <div class="section-head"><h2>Top posts</h2><span class="muted" style="font-size:14px">Last 90 days, by views (likes when views are hidden)</span></div>
+      <div class="accounts" id="progress-accounts"></div>
+    </div>
+  </section>
+
+  <!-- ===== VIEW: RESULTS ===== -->
+  <section class="view" data-view="results" hidden>
+    <div class="run-bar">
+      <span class="who" id="run-who"></span>
+      <span class="badge cache" id="cache-badge" hidden></span>
+      <span class="spacer"></span>
+      <button class="btn ghost small" type="button" data-go="form">New run</button>
+    </div>
+
+    <div class="alert error" id="no-posts" role="status" hidden>None of these accounts has public posts in the last 90 days, so there is nothing to compare. The notes below say why for each account.</div>
+
+    <div class="insights" id="insights">
+      <div class="card">
+        <span class="label">Competitors</span>
+        <h2>What their top posts share</h2>
+        <ul class="insight-list" id="shared"></ul>
+      </div>
+      <div class="card">
+        <span class="label">Client</span>
+        <h2 id="differs-title"></h2>
+        <ul class="insight-list diff" id="differs"></ul>
+      </div>
+    </div>
+
+    <div class="section" id="scripts-section">
+      <div class="section-head"><h2 id="scripts-title"></h2><span class="muted" style="font-size:14px">About 30 to 45 seconds each</span></div>
+      <div class="scripts" id="scripts"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>Evidence: top posts</h2><span class="muted" style="font-size:14px">Last 90 days. Click a post to read its transcript.</span></div>
+      <div class="accounts" id="result-accounts"></div>
+    </div>
+  </section>
+
+  <!-- ===== VIEW: ERROR, DAILY LIMIT ===== -->
+  <section class="view" data-view="error-limit" hidden>
+    <div class="card notice limit" role="alert">
+      <div class="icon">!</div>
+      <h2>The daily limit is reached</h2>
+      <p id="limit-text"></p>
+      <p>An account set that ran in the last 24 hours still works, because it comes from the cache at no cost.</p>
+      <div class="actions"><button class="btn secondary" type="button" data-go="form">Back to the form</button></div>
+      <p class="detail" id="limit-cause"></p>
+    </div>
+  </section>
+
+  <!-- ===== VIEW: ERROR, RUN FAILED ===== -->
+  <section class="view" data-view="error-scrape" hidden>
+    <div class="card notice failed" role="alert">
+      <div class="icon">!</div>
+      <h2 id="fail-title">We could not get the posts</h2>
+      <p id="fail-text">The post provider stopped the run before it finished. This is usually a short outage on its side, not a problem with your accounts.</p>
+      <p>Wait a minute and try again. Your accounts are still in the form.</p>
+      <div class="actions"><button class="btn" type="button" id="retry-btn">Try again</button><button class="btn ghost" type="button" data-go="form">Edit accounts</button></div>
+      <p class="detail" id="fail-cause"></p>
+    </div>
+  </section>
+
+  <footer class="app-foot">Public Instagram data only. Transcripts come from speech to text and can contain errors.</footer>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

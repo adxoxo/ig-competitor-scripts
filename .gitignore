@@ -1,0 +1,12 @@
+# Local secrets: never commit (Wrangler also reads .dev.vars.<env>)
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env*
+
+# Tools
+node_modules
+.wrangler
+
+# Output of the real end-to-end run (video, screenshots, report)
+e2e-out/

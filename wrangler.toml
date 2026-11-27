@@ -1,0 +1,10 @@
+# Cloudflare Pages project. Static files come from public/, the API from functions/.
+name = "ig-competitor-scripts"
+pages_build_output_dir = "public"
+compatibility_date = "2026-09-10"
+
+# One KV store for runs, transcripts, the result cache, and the daily caps.
+# The id of the KV namespace "ig-competitor-scripts" (not a secret).
+[[kv_namespaces]]
+binding = "KV"
+id = "fee0e76dc60540ec8a3c686da8aac388"

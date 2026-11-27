@@ -1,0 +1,35 @@
+{
+  "_note": "Real public Instagram accounts for the end-to-end test. Sizes are third-party estimates from November 2026.",
+  "finance": {
+    "niche": "Personal finance, talking-head reels in English",
+    "client": "fellasfinance",
+    "accounts": [
+      "fellasfinance",
+      "humphreytalks",
+      "your.richbff",
+      "calltoleap",
+      "herfirst100k"
+    ]
+  },
+  "business": {
+    "niche": "Business and creator growth, talking-head reels in English (live-link check only)",
+    "client": "nateassets",
+    "accounts": [
+      "nateassets",
+      "thedankoe",
+      "leilahormozi",
+      "orenmeetsworld"
+    ]
+  },
+  "negative": {
+    "niche": "Finance set with one account that does not exist (run only on request: it costs a full scrape)",
+    "client": "fellasfinance",
+    "accounts": [
+      "fellasfinance",
+      "humphreytalks",
+      "your.richbff",
+      "calltoleap",
+      "no.such.account.e2e"
+    ]
+  }
+}

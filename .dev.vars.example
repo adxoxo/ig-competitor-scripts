@@ -1,0 +1,5 @@
+# Copy to .dev.vars for `wrangler pages dev`. Names only, never commit values.
+# On Cloudflare, set these as Pages secrets in the dashboard.
+APIFY_TOKEN=
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
