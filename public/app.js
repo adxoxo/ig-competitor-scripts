@@ -9,7 +9,7 @@ const MAX = 11;
 const FIRST_POLL_MS = 5000; // wait before the first status call
 const SCRAPE_POLL_MS = 2000; // while Apify runs
 const PAGE_POLL_MS = 500; // while the server reads the result pages
-const BATCHES_IN_FLIGHT = 6; // 6 batches of 3 posts: 18 posts at a time
+const BATCHES_IN_FLIGHT = 9; // 9 batches of 2 posts: 18 posts at a time
 // Cloudflare KV can take up to 60 s to show a key that was just written. The server then answers
 // 409 { retry: true }, and the page asks again every 5 s for up to 75 s.
 const RETRY_MS = 5000;
@@ -77,7 +77,17 @@ function renderForm() {
   $('run-btn').disabled = busy;
 }
 
-$('acct-list').addEventListener('input', (e) => { if (e.target.dataset.i !== undefined) rows[+e.target.dataset.i] = e.target.value; });
+$('acct-list').addEventListener('input', (e) => {
+  if (e.target.dataset.i === undefined) return;
+  // The field shows a fixed "@", so a typed or pasted "@" is dropped at once.
+  if (/^\s*@/.test(e.target.value)) e.target.value = e.target.value.replace(/^\s*@+/, '');
+  rows[+e.target.dataset.i] = e.target.value;
+});
+// On leaving the field, a pasted profile link becomes the handle.
+$('acct-list').addEventListener('focusout', (e) => {
+  if (e.target.dataset.i === undefined || !e.target.value.trim()) return;
+  e.target.value = rows[+e.target.dataset.i] = clean(e.target.value);
+});
 // Change the client by toggling the class only, so the radio keeps the keyboard focus.
 $('acct-list').addEventListener('change', (e) => {
   if (e.target.name !== 'client') return;
@@ -87,12 +97,15 @@ $('acct-list').addEventListener('change', (e) => {
 $('acct-list').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-rm]');
   if (!btn) return;
+  // Blur first: a focusout on the removed input must not write its value into the row that moves up.
+  document.activeElement?.blur();
   const i = +btn.dataset.rm;
   rows.splice(i, 1);
   if (clientIdx >= rows.length) clientIdx = 0;
   else if (i < clientIdx) clientIdx--;
   rowErrors = {};
   renderForm();
+  document.querySelector(`input[data-i="${Math.max(0, i - 1)}"]`).focus();
 });
 $('add-acct').addEventListener('click', () => {
   if (rows.length >= MAX) return;
@@ -131,7 +144,9 @@ function formAlert(text) {
 
 $('run-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  if (!busy && validate()) run();
+  if (busy) return;
+  if (validate()) run();
+  else document.querySelector(`input[data-i="${Math.min(...Object.keys(rowErrors).map(Number))}"]`)?.focus();
 });
 // After an analysis failure, "Try again" repeats only the analysis of the same run (no new scrape).
 $('retry-btn').addEventListener('click', () => {

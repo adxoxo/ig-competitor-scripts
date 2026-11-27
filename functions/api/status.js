@@ -12,7 +12,7 @@
 import { getRun, readPage, POSTS_PER_ACCOUNT, PAGE_SIZE } from '../../lib/apify.js';
 import { rankPosts, BATCH_SIZE } from '../../lib/rank.js';
 import { accountsView } from '../../lib/view.js';
-import { json, jsonErrors, isRunId, savePut } from '../../lib/http.js';
+import { json, jsonErrors, isRunId, savePut, methodNotAllowed } from '../../lib/http.js';
 
 const CAPTION_CHARS = 500; // enough for the title and the analysis
 // More missing pages than this would cost too much CPU in one request: the browser waits and asks again.
@@ -104,6 +104,7 @@ export const onRequestGet = jsonErrors(async ({ request, env }) => {
     accounts,
     postCount,
     batchCount: Math.ceil(postCount / BATCH_SIZE),
+    batchSize: BATCH_SIZE, // stored, so a run keeps its batch size across a deploy
     scrapeCostUsd: current.costUsd ?? null,
     rankedAt: new Date().toISOString(), // analyze.js uses it to time the "final" fallback
   };
@@ -117,10 +118,13 @@ function rankedView(top, run) {
     stage: 'ranked',
     postCount: top.postCount,
     batchCount: top.batchCount,
-    batchSize: BATCH_SIZE,
+    batchSize: top.batchSize ?? 3, // 3: runs ranked before batchSize was stored
     client: run.client,
     cached: false,
     scrapeCostUsd: top.scrapeCostUsd,
     accounts: accountsView(top.accounts, run.client),
   };
 }
+
+// Any other method gets 405 in JSON.
+export const onRequest = methodNotAllowed('GET');

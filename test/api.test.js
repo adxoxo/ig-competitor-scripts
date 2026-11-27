@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { onRequestPost as start } from '../functions/api/start.js';
 import { onRequestGet as status } from '../functions/api/status.js';
 import { mapItem } from '../lib/apify.js';
-import { cacheKey } from '../lib/guard.js';
+import { cacheKey, MAX_RUNS_PER_DAY } from '../lib/guard.js';
 import { BATCH_SIZE } from '../lib/rank.js';
 import { fakeKv } from './fake-kv.js';
 import { calls, stubFetch, restoreFetch, RUN, recent } from './helpers.js';
@@ -104,13 +104,15 @@ test('start: the 11th run from one IP gets 429 and no provider call', async () =
   assert.equal(calls.length, before);
 });
 
-test('start: the global cap comes from Apify: 15 runs today -> 429, no paid start; yesterday does not count', async () => {
-  stubFetch([runList(15), startOk]);
+test('start: the global cap comes from Apify: 12 runs today -> 429, no paid start; yesterday does not count', async () => {
+  // 12 runs x about 77 KV writes stay under the free plan's 1,000 writes a day.
+  assert.equal(MAX_RUNS_PER_DAY, 12);
+  stubFetch([runList(MAX_RUNS_PER_DAY), startOk]);
   const res = await start(startRequest(form));
   assert.equal(res.status, 429);
   assert.match((await res.json()).error, /daily limit/);
   assert.ok(!calls.some((c) => c.url.includes('maxTotalChargeUsd')));
-  stubFetch([runList(14), startOk]);
+  stubFetch([runList(MAX_RUNS_PER_DAY - 1), startOk]);
   assert.equal((await start(startRequest(form))).status, 200);
 });
 
@@ -208,6 +210,7 @@ test('status: scraping, then one page per call, then the top 10 chosen from the 
   assert.equal(top.accounts[0].posts[0].audioUrl, 'https://scontent.cdninstagram.com/a.m4a');
   assert.ok(!JSON.stringify(top).includes('secret.mp4'), 'the video URL is not stored');
   assert.ok(top.rankedAt);
+  assert.equal(top.batchSize, BATCH_SIZE, 'the batch size is stored with the ranking');
   assert.equal(await env.KV.get(`pg:${RUN}:2`), null, 'the last page is not stored');
   assert.equal(env.KV.writes - writesBefore, 3, '2 page keys and the top list');
 });
@@ -293,4 +296,20 @@ test('status: a failed scrape names the cause', async () => {
   const res = await (await status(statusRequest(`run=${RUN}`))).json();
   assert.equal(res.stage, 'failed');
   assert.match(res.error, /TIMED-OUT/);
+});
+
+test('a wrong method gets 405 JSON with an Allow header; an unknown /api path gets 404 JSON', async () => {
+  const routes = { start: 'POST', status: 'GET', transcribe: 'POST', analyze: 'POST' };
+  for (const [name, allow] of Object.entries(routes)) {
+    const { onRequest } = await import(`../functions/api/${name}.js`);
+    const res = await onRequest({ request: new Request(`https://x.test/api/${name}`, { method: 'PUT' }), env });
+    assert.equal(res.status, 405, name);
+    assert.equal(res.headers.get('Allow'), allow, name);
+    assert.match(res.headers.get('Content-Type'), /application\/json/);
+    assert.match((await res.json()).error, new RegExp(allow));
+  }
+  const { onRequest: unknown } = await import('../functions/api/[[path]].js');
+  const res = await unknown({ request: new Request('https://x.test/api/nope'), env });
+  assert.equal(res.status, 404);
+  assert.deepEqual(await res.json(), { error: 'Unknown API route.' });
 });

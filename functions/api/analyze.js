@@ -7,7 +7,7 @@
 import { cacheKey } from '../../lib/guard.js';
 import { analyze } from '../../lib/llm.js';
 import { accountsView, isVideo } from '../../lib/view.js';
-import { json, jsonErrors, isRunId, savePut } from '../../lib/http.js';
+import { json, jsonErrors, isRunId, savePut, methodNotAllowed } from '../../lib/http.js';
 
 // The browser may send final: true when transcripts stay invisible. The server accepts it only
 // this long after the ranking, so nobody can trigger the paid call early.
@@ -77,3 +77,6 @@ export const onRequestPost = jsonErrors(async ({ request, env }) => {
   }
   return json(result);
 });
+
+// Any other method gets 405 in JSON.
+export const onRequest = methodNotAllowed('POST');

@@ -14,8 +14,10 @@ afterEach(restoreFetch);
 const words = (n) => Array.from({ length: n }, (_, i) => `w${i}`).join(' ');
 
 // CDN answers per audio URL; OpenAI answers in turn from openai.replies.
+let arrayBufferReads = 0;
 function stub({ cdn = {}, openai = { replies: [] } } = {}) {
   calls.length = 0;
+  arrayBufferReads = 0;
   globalThis.fetch = async (url, init = {}) => {
     url = String(url);
     calls.push({ url, init });
@@ -25,7 +27,11 @@ function stub({ cdn = {}, openai = { replies: [] } } = {}) {
       if (r.throw) throw new Error('timeout');
       // r.body may be a function, so each attempt gets a fresh stream.
       const body = typeof r.body === 'function' ? r.body() : r.body;
-      return new Response(r.status === 200 ? (body ?? new Uint8Array([1, 2, 3])) : 'denied', { status: r.status, headers: r.headers || {} });
+      const res = new Response(r.status === 200 ? (body ?? new Uint8Array([1, 2, 3])) : 'denied', { status: r.status, headers: r.headers || {} });
+      // Count the native whole-body reads, to check which read path the code takes.
+      const whole = res.arrayBuffer.bind(res);
+      res.arrayBuffer = () => { arrayBufferReads++; return whole(); };
+      return res;
     }
     if (url === 'https://api.openai.com/v1/audio/transcriptions') {
       assert.equal(init.body.get('model'), 'gpt-transcribe');
@@ -42,7 +48,7 @@ function stub({ cdn = {}, openai = { replies: [] } } = {}) {
 async function seed(posts) {
   const numbered = posts.map((p, i) => ({ index: i, rank: i + 1, caption: `Caption ${i}`, type: 'video', duration: 30, ...p }));
   await env.KV.put(`run:${RUN}`, JSON.stringify({ usernames: ['a'], client: 'a' }));
-  await env.KV.put(`top:${RUN}`, JSON.stringify({ batchCount: Math.ceil(numbered.length / BATCH_SIZE), accounts: [{ account: 'a', posts: numbered }] }));
+  await env.KV.put(`top:${RUN}`, JSON.stringify({ batchCount: Math.ceil(numbered.length / BATCH_SIZE), batchSize: BATCH_SIZE, accounts: [{ account: 'a', posts: numbered }] }));
 }
 const req = (body) => ({ request: new Request('https://x.test/api/transcribe', { method: 'POST', body: JSON.stringify(body) }), env });
 async function allBatches(n) {
@@ -118,6 +124,68 @@ test('an audio file over 8 MB is not sent to OpenAI (by header, and while readin
   assert.deepEqual(posts.map((p) => p.mark), ['failed', 'failed']);
   assert.equal(cancelled, 2, 'both attempts stop reading at the cap');
   assert.ok(!calls.some((c) => c.url.includes('openai')));
+});
+
+test('a body with a content-length is read in one native call; without one, by the capped loop', async () => {
+  const bytes = new Uint8Array(500 * 1024);
+  await seed([{ audioUrl: audio('sized') }, { audioUrl: audio('unsized') }]);
+  stub({
+    cdn: {
+      [audio('sized')]: { status: 200, body: bytes, headers: { 'content-length': String(bytes.length) } },
+      [audio('unsized')]: { status: 200, body: () => new Blob([bytes]).stream() },
+    },
+    openai: { replies: [{ body: { text: words(9) } }, { body: { text: words(9) } }] },
+  });
+  const posts = await allBatches(2);
+  assert.deepEqual(posts.map((p) => p.mark), ['speech', 'speech']);
+  assert.equal(arrayBufferReads, 1, 'only the sized body uses arrayBuffer()');
+  const sent = calls.filter((c) => c.url.includes('openai')).map((c) => c.init.body.get('file').size);
+  assert.deepEqual(sent, [bytes.length, bytes.length]);
+});
+
+test('a compressed body does not trust its content-length: the capped loop reads it', async () => {
+  await seed([{ audioUrl: audio('gz') }]);
+  const chunk = new Uint8Array(1024 * 1024);
+  let cancelled = 0;
+  const stream = () => new ReadableStream({ pull(c) { c.enqueue(chunk); }, cancel() { cancelled++; } });
+  stub({ cdn: { [audio('gz')]: { status: 200, body: stream, headers: { 'content-length': '1000', 'content-encoding': 'gzip' } } } });
+  const [post] = await allBatches(1);
+  assert.equal(post.mark, 'failed');
+  assert.equal(arrayBufferReads, 0);
+  assert.equal(cancelled, 2, 'both attempts stop reading at the cap');
+  assert.ok(!calls.some((c) => c.url.includes('openai')));
+});
+
+test('a content-length that is not a plain number goes to the capped loop; 0 is a valid size', async () => {
+  const bytes = new Uint8Array(1000);
+  await seed([{ audioUrl: audio('odd') }, { audioUrl: audio('zero') }]);
+  stub({
+    cdn: {
+      [audio('odd')]: { status: 200, body: () => new Blob([bytes]).stream(), headers: { 'content-length': '1000, 1000' } },
+      [audio('zero')]: { status: 200, body: new Uint8Array(0), headers: { 'content-length': '0' } },
+    },
+    openai: { replies: [{ body: { text: words(9) } }, { body: { text: words(9) } }] },
+  });
+  const posts = await allBatches(2);
+  assert.equal(arrayBufferReads, 1, 'only "0" takes the native read');
+  // The two posts of the batch run at the same time, so the call order is not fixed.
+  const sent = calls.filter((c) => c.url.includes('openai')).map((c) => c.init.body.get('file').size);
+  assert.deepEqual(sent.sort((x, y) => x - y), [0, 1000]);
+  assert.deepEqual(posts.map((p) => p.mark), ['speech', 'speech']);
+});
+
+test('a run ranked before batchSize was stored keeps batches of 3', async () => {
+  const posts = Array.from({ length: 7 }, (_, i) => ({ index: i, rank: i + 1, caption: `Caption ${i}`, type: 'video', duration: 30, audioUrl: audio(i) }));
+  await env.KV.put(`run:${RUN}`, JSON.stringify({ usernames: ['a'], client: 'a' }));
+  await env.KV.put(`top:${RUN}`, JSON.stringify({ batchCount: 3, accounts: [{ account: 'a', posts }] })); // no batchSize: first deploy
+  stub({ openai: { replies: Array.from({ length: 7 }, () => ({ body: { text: words(9) } })) } });
+  const got = [];
+  for (let batch = 0; batch < 3; batch++) got.push((await (await transcribe(req({ runId: RUN, batch }))).json()).posts.map((p) => p.index));
+  assert.deepEqual(got, [[0, 1, 2], [3, 4, 5], [6]]);
+});
+
+test('a batch is 2 posts, for the 10 ms CPU limit of the free plan', () => {
+  assert.equal(BATCH_SIZE, 2);
 });
 
 test('a failed KV write still returns the paid transcripts', async () => {

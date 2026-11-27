@@ -12,7 +12,7 @@ I built it as a trial task for a developer role.
 1. **Start.** The page sends the usernames to `/api/start`. The server checks the input, the 24 h cache, and the daily caps. It counts the run, then starts one Apify run for all the accounts.
 2. **Posts.** The page asks `/api/status` every 2 s (first call after 5 s) until the scrape is done. It then asks for the result one page of 50 posts per call. After the last page, the server keeps the posts of the 90 days before the run started and picks the top 10 per account.
 3. **Tables.** The page shows the top-10 tables at once, with "transcript pending" marks.
-4. **Transcripts.** The page sends `/api/transcribe` one batch number at a time, 6 batches at the same time. A batch is 3 posts. The server downloads the audio file of each post and sends it to OpenAI speech to text. If no account has any post, the page stops here and says so.
+4. **Transcripts.** The page sends `/api/transcribe` one batch number at a time, 9 batches at the same time. A batch is 2 posts. The server downloads the audio file of each post and sends it to OpenAI speech to text. If no account has any post, the page stops here and says so.
 5. **Analysis.** The page calls `/api/analyze`. The server makes one Claude call and gets JSON back: what the competitors' top posts share, how the client differs, and 3 scripts. The page shows the result.
 
 ```
@@ -39,11 +39,11 @@ browser ──► /api/start ──► Apify (one run, all accounts)
   - transcribe and analyze answer `409 {retry: true}` when the ranking or a batch is not visible yet, and the page asks again every 5 s for up to 75 s;
   - after that, the page asks analyze with `final: true`. The server accepts it only 90 s after the ranking. The posts of a missing batch then count as "transcript failed".
 - **Cache.** A good result is kept for 24 hours under the client plus the sorted account list. The same set comes back at once and costs nothing. A result is not cached when a batch is missing or when more than half of the videos have no transcript. The same set started again while the first run is still going, or within about a minute of its result, starts a second paid run.
-- **Caps.** 15 new runs per day in total, counted from Apify's own list of today's runs, which is consistent. 10 per visitor, counted in KV by a daily hash of the IP address; KV can serve an old count for up to a minute, so this cap is approximate. Each run is counted before Apify is called. Each Apify run has a cost cap and a 10-minute timeout. Every provider call has a timeout.
-- **KV writes.** An 11-account run makes about 59 writes: 2 at the start, 17 pages, 1 top list, 37 batches, and 2 for the analysis. 15 runs make about 885, under the free plan's 1,000 a day. A failed write after a paid call is logged, and the paid result is still returned.
+- **Caps.** 12 new runs per day in total, counted from Apify's own list of today's runs, which is consistent. 10 per visitor, counted in KV by a daily hash of the IP address; KV can serve an old count for up to a minute, so this cap is approximate. Each run is counted before Apify is called. Each Apify run has a cost cap and a 10-minute timeout. Every provider call has a timeout.
+- **KV writes.** An 11-account run makes about 77 writes: 2 at the start, 17 pages, 1 top list, 55 batches, and 2 for the analysis. 12 runs make about 924, under the free plan's 1,000 a day. A failed write after a paid call is logged, and the paid result is still returned.
 - **Audio, not video.** The tool downloads the audio-only file of a post (about 0.5 MB), only from Instagram's media hosts, with no redirects and at most 8 MB. The video file is never downloaded or stored. Videos over 3 minutes are not transcribed.
 - **The model reads data, not instructions.** Captions and transcripts go to Claude in one delimited JSON block, with the rule that text inside is content to analyse. Code, not the model, handles the empty cases: no posts at all stops the run with a clear message, a client without posts gets a fixed "nothing to compare" point, and competitors without posts get a fixed "no competitor posts" point.
-- **Errors.** Every route answers in JSON, also on an unexpected error. The page asks a failed status call again up to 3 times before it shows an error.
+- **Errors.** Every route answers in JSON, also on an unexpected error, a wrong method (405 with an `Allow` header), or an unknown `/api/` path (404). The page asks a failed status call again up to 3 times before it shows an error.
 - **Plain code.** No framework, no build step, no dependencies. Plain JavaScript on Cloudflare Pages Functions.
 
 ## Files

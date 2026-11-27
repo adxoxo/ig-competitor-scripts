@@ -20,7 +20,7 @@ The repository gets no new dependency. The script runs in the Playwright Docker 
 2. Run the test. `OUT_DIR` must be a folder that Docker can mount (not under `/tmp`).
 
 ```sh
-OUT=/home/node/projects/outputs/<week>/<day>/ig-competitor-e2e
+OUT=/path/to/output/ig-competitor-e2e
 docker run --rm --network host --ipc=host \
   -v "$PWD/e2e":/e2e:ro -v "$OUT":/out \
   -e BASE_URL=http://127.0.0.1:8799/ -e SET=finance -e OUT_DIR=/out \

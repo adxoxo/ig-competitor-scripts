@@ -1,10 +1,9 @@
 // POST /api/transcribe  { runId, batch }
-// Transcribes one batch of posts (BATCH_SIZE) and stores the result in KV as tx:<runId>:<batch>.
+// Transcribes one batch of posts (top.batchSize) and stores the result in KV as tx:<runId>:<batch>.
 // The audio URLs come from the server's own ranked list, never from the browser.
 
-import { BATCH_SIZE } from '../../lib/rank.js';
 import { transcribePost } from '../../lib/transcribe.js';
-import { json, jsonErrors, isRunId, savePut } from '../../lib/http.js';
+import { json, jsonErrors, isRunId, savePut, methodNotAllowed } from '../../lib/http.js';
 
 export const onRequestPost = jsonErrors(async ({ request, env }) => {
   let body;
@@ -33,8 +32,10 @@ export const onRequestPost = jsonErrors(async ({ request, env }) => {
   const saved = await env.KV.get(key, 'json');
   if (saved) return json(saved);
 
-  const first = batch * BATCH_SIZE;
-  const posts = top.accounts.flatMap((a) => a.posts).filter((p) => p.index >= first && p.index < first + BATCH_SIZE);
+  // The batch size stored with the ranking; 3 for runs ranked before it was stored.
+  const size = top.batchSize ?? 3;
+  const first = batch * size;
+  const posts = top.accounts.flatMap((a) => a.posts).filter((p) => p.index >= first && p.index < first + size);
 
   // All posts of the batch at once. allSettled: one bad post never fails the others.
   const settled = await Promise.allSettled(posts.map((p) => transcribePost(p, env)));
@@ -46,3 +47,6 @@ export const onRequestPost = jsonErrors(async ({ request, env }) => {
   await savePut(env.KV, key, JSON.stringify(result));
   return json(result);
 });
+
+// Any other method gets 405 in JSON.
+export const onRequest = methodNotAllowed('POST');

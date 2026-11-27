@@ -4,7 +4,7 @@
 
 import { validateInput, cacheKey, checkIpCap, countIpRun, hashIp, today, MAX_RUNS_PER_DAY } from '../../lib/guard.js';
 import { startRun, runsStartedToday } from '../../lib/apify.js';
-import { json, jsonErrors, savePut } from '../../lib/http.js';
+import { json, jsonErrors, savePut, methodNotAllowed } from '../../lib/http.js';
 
 export const onRequestPost = jsonErrors(async ({ request, env }) => {
   let body;
@@ -66,3 +66,6 @@ export const onRequestPost = jsonErrors(async ({ request, env }) => {
   }
   return json({ runId });
 });
+
+// Any other method gets 405 in JSON.
+export const onRequest = methodNotAllowed('POST');
